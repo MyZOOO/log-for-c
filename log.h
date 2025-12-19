@@ -6,6 +6,7 @@
 #include <time.h>
 #include <wchar.h>
 #include <locale.h>
+#include <stdbool.h>
 
 // ANSI颜色代码
 #define COLOR_RESET   "\033[0m"
@@ -24,9 +25,18 @@ void get_time_string(char* buffer, size_t size);
 
 // 内部打印函数
 static inline void _print_int(int x) { printf("%d", x); }
+static inline void _print_uint(unsigned int x) { printf("%u", x); }
+static inline void _print_short(short x) { printf("%hd", x); }
+static inline void _print_ushort(unsigned short x) { printf("%hu", x); }
+static inline void _print_long(long x) { printf("%ld", x); }
+static inline void _print_ulong(unsigned long x) { printf("%lu", x); }
+static inline void _print_long_long(long long x) { printf("%lld", x); }
+static inline void _print_ulong_long(unsigned long long x) { printf("%llu", x); }
 static inline void _print_double(double x) { printf("%.2f", x); }
+static inline void _print_long_double(long double x) { printf("%.2Lf", x); }
 static inline void _print_str(const char* x) { printf("%s", x); }
 static inline void _print_char(int x) { printf("%c", x); }
+static inline void _print_bool(_Bool x) { printf(x ? "true" : "false"); }
 static inline void _print_wstr(const wchar_t* x) { 
     static int locale_set = 0;
     if (!locale_set) {
@@ -38,10 +48,20 @@ static inline void _print_wstr(const wchar_t* x) {
 
 // 类型自动打印（使用C23的_Generic）
 #define PRINT_VALUE(x) _Generic((x), \
+    _Bool: _print_bool, \
+    short: _print_short, \
+    unsigned short: _print_ushort, \
     int: _print_int, \
-    long: _print_int, \
+    unsigned int: _print_uint, \
+    long: _print_long, \
+    unsigned long: _print_ulong, \
+    long long: _print_long_long, \
+    unsigned long long: _print_ulong_long, \
     double: _print_double, \
     float: _print_double, \
+    long double: _print_long_double, \
+    signed char: _print_char, \
+    unsigned char: _print_char, \
     char: _print_char, \
     char*: _print_str, \
     const char*: _print_str, \
@@ -50,56 +70,48 @@ static inline void _print_wstr(const wchar_t* x) {
 )(x)
 
 // log函数重载 - 单参数
-static inline void _log_int(int x) {
-    printf("%d\n", x);
-}
+#define _log_1(x) do { PRINT_VALUE(x); printf("\n"); } while(0)
 
-static inline void _log_double(double x) {
-    printf("%.2f\n", x);
-}
-
-static inline void _log_str(const char* x) {
-    printf("%s\n", x);
-}
+// 通用格式化分发（fmt + 0~10 个参数）
+#define _fmt_0(fmt) do { printf("%s\n", (fmt)); } while(0)
+#define _GET_FMT_ARG(_1,_2,_3,_4,_5,_6,_7,_8,_9,_10,_11,NAME,...) NAME
+#define _fmt_print(...) _GET_FMT_ARG(__VA_ARGS__, \
+    _log_fmt_10, _log_fmt_9, _log_fmt_8, _log_fmt_7, _log_fmt_6, \
+    _log_fmt_5, _log_fmt_4, _log_fmt_3, _log_fmt_2, _log_fmt_1, _fmt_0)(__VA_ARGS__)
 
 // log函数重载 - 格式化字符串 + 一个参数
-static inline void _log_fmt_int(const char* fmt, int b) {
-    const char* p = fmt;
-    int done = 0;
-    while (*p) {
-        if (*p == '{' && *(p+1) == '}' && !done) {
-            printf("%d", b);
-            done = 1;
-            p += 2;
-        } else {
-            putchar(*p);
-            p++;
-        }
-    }
-    printf("\n");
-}
+#define _log_fmt_1(fmt, a) do { \
+    const char* _p = (fmt); \
+    int _done = 0; \
+    while (*_p) { \
+        if (*_p == '{' && *(_p+1) == '}' && !_done) { \
+            PRINT_VALUE(a); \
+            _done = 1; \
+            _p += 2; \
+        } else { \
+            putchar(*_p); \
+            _p++; \
+        } \
+    } \
+    printf("\n"); \
+} while(0)
 
 // log函数重载 - 格式化字符串 + 两个参数
-static inline void _log_fmt_2(const char* fmt, int b, double c) {
-    const char* p = fmt;
-    int done = 0;
-    while (*p) {
-        if (*p == '{' && *(p+1) == '}') {
-            if (done == 0) {
-                printf("%d", b);
-                done = 1;
-            } else if (done == 1) {
-                printf("%.2f", c);
-                done = 2;
-            }
-            p += 2;
-        } else {
-            putchar(*p);
-            p++;
-        }
-    }
-    printf("\n");
-}
+#define _log_fmt_2(fmt, a, b) do { \
+    const char* _p = (fmt); \
+    int _done = 0; \
+    while (*_p) { \
+        if (*_p == '{' && *(_p+1) == '}') { \
+            if (_done == 0) { PRINT_VALUE(a); _done = 1; } \
+            else if (_done == 1) { PRINT_VALUE(b); _done = 2; } \
+            _p += 2; \
+        } else { \
+            putchar(*_p); \
+            _p++; \
+        } \
+    } \
+    printf("\n"); \
+} while(0)
 
 // 格式化字符串 + 三个参数
 #define _log_fmt_3(fmt, a, b, c) do { \
@@ -278,28 +290,20 @@ static inline void _log_fmt_2(const char* fmt, int b, double c) {
 
 #define log(...) _GET_11TH_ARG(__VA_ARGS__, \
     _log_fmt_10, _log_fmt_9, _log_fmt_8, _log_fmt_7, _log_fmt_6, \
-    _log_fmt_5, _log_fmt_4, _log_fmt_3, _log_2, _log_1, _log_1)(__VA_ARGS__)
-
-#define _log_1(x) _Generic((x), \
-    int: _log_int, \
-    double: _log_double, \
-    char*: _log_str, \
-    const char*: _log_str \
-)(x)
-
-#define _log_2(a, b) _Generic((b), \
-    int: _log_fmt_int \
-)(a, b)
-
-#define _log_3(a, b, c) _Generic((b), \
-    int: _log_fmt_2 \
-)(a, b, c)
+    _log_fmt_5, _log_fmt_4, _log_fmt_3, _log_fmt_2, _log_fmt_1, _log_1)(__VA_ARGS__)
 
 // 颜色log
 #define clog(color, msg) do { \
     printf("%s", get_color_code(color)); \
     PRINT_VALUE(msg); \
     printf("%s\n", COLOR_RESET); \
+} while(0)
+
+// 颜色log（格式化）
+#define clog_f(color, ...) do { \
+    printf("%s", get_color_code(color)); \
+    _fmt_print(__VA_ARGS__); \
+    printf("%s", COLOR_RESET); \
 } while(0)
 
 // 日志等级宏
@@ -311,12 +315,26 @@ static inline void _log_fmt_2(const char* fmt, int b, double c) {
     printf("\n"); \
 } while(0)
 
+#define logerr_f(...) do { \
+    char time_str[64]; \
+    get_time_string(time_str, sizeof(time_str)); \
+    printf("%s[%s ERROR]%s ", COLOR_RED, time_str, COLOR_RESET); \
+    _fmt_print(__VA_ARGS__); \
+} while(0)
+
 #define logok(msg) do { \
     char time_str[64]; \
     get_time_string(time_str, sizeof(time_str)); \
     printf("%s[%s OK]%s ", COLOR_GREEN, time_str, COLOR_RESET); \
     PRINT_VALUE(msg); \
     printf("\n"); \
+} while(0)
+
+#define logok_f(...) do { \
+    char time_str[64]; \
+    get_time_string(time_str, sizeof(time_str)); \
+    printf("%s[%s OK]%s ", COLOR_GREEN, time_str, COLOR_RESET); \
+    _fmt_print(__VA_ARGS__); \
 } while(0)
 
 #define loginfo(msg) do { \
@@ -327,12 +345,41 @@ static inline void _log_fmt_2(const char* fmt, int b, double c) {
     printf("\n"); \
 } while(0)
 
+#define loginfo_f(...) do { \
+    char time_str[64]; \
+    get_time_string(time_str, sizeof(time_str)); \
+    printf("%s[%s INFO]%s ", COLOR_CYAN, time_str, COLOR_RESET); \
+    _fmt_print(__VA_ARGS__); \
+} while(0)
+
 #define logwarn(msg) do { \
     char time_str[64]; \
     get_time_string(time_str, sizeof(time_str)); \
     printf("%s[%s WARN]%s ", COLOR_YELLOW, time_str, COLOR_RESET); \
     PRINT_VALUE(msg); \
     printf("\n"); \
+} while(0)
+
+#define logwarn_f(...) do { \
+    char time_str[64]; \
+    get_time_string(time_str, sizeof(time_str)); \
+    printf("%s[%s WARN]%s ", COLOR_YELLOW, time_str, COLOR_RESET); \
+    _fmt_print(__VA_ARGS__); \
+} while(0)
+
+#define logdebug(msg) do { \
+    char time_str[64]; \
+    get_time_string(time_str, sizeof(time_str)); \
+    printf("%s[%s DEBUG]%s ", COLOR_GRAY, time_str, COLOR_RESET); \
+    PRINT_VALUE(msg); \
+    printf("\n"); \
+} while(0)
+
+#define logdebug_f(...) do { \
+    char time_str[64]; \
+    get_time_string(time_str, sizeof(time_str)); \
+    printf("%s[%s DEBUG]%s ", COLOR_GRAY, time_str, COLOR_RESET); \
+    _fmt_print(__VA_ARGS__); \
 } while(0)
 
 #endif
